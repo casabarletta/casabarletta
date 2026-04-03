@@ -53,7 +53,27 @@
       // Re-render si hay resultados visibles
       if (document.getElementById('searchInput').value.length >= 2) renderResults();
     } catch(e) { console.error('Error cargando precios:', e); }
+
+    // Cargar tipo de cambio guardado
+    try {
+      const tcSnap = await getDoc(doc(db, 'config', 'tipoCambio'));
+      if (tcSnap.exists()) {
+        const tc = tcSnap.data().valor;
+        if (tc && tc > 0) {
+          window.tipoCambio = tc;
+          const input = document.getElementById('tipoCambioInput');
+          if (input) input.value = tc;
+        }
+      }
+    } catch(e) { console.error('Error cargando tipo de cambio:', e); }
   });
+
+  // Guardar tipo de cambio en Firestore
+  window.guardarTipoCambio = async function(valor) {
+    try {
+      await setDoc(doc(db, 'config', 'tipoCambio'), { valor, updatedAt: new Date().toISOString() });
+    } catch(e) { console.error('Error guardando tipo de cambio:', e); }
+  };
 
   // Guardar precio modificado en Firestore
   window.guardarPrecio = async function(productoNombre, campo, valor) {
@@ -309,7 +329,10 @@ table.pt td.sub { background:#E8F5E9; color:#1B5E20; font-weight:bold; text-alig
         <span style="font-size:11px;color:#555;font-weight:bold;white-space:nowrap">&#x1f4b1; USD 1 =</span>
         <input type="number" id="tipoCambioInput" value="1420" min="1" step="50"
           style="width:90px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;text-align:right;font-weight:bold"
-          oninput="tipoCambio=parseFloat(this.value)||1;renderResults()">
+          oninput="tipoCambio=parseFloat(this.value)||1;renderResults();clearTimeout(window._tcTimer);window._tcTimer=setTimeout(()=>window.guardarTipoCambio&&window.guardarTipoCambio(tipoCambio),800)">
+        <button onclick="fetchTipoCambio()" id="btnRefreshTC" title="Actualizar desde Ámbito"
+          style="background:#1B3A5C;color:white;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;font-size:13px">&#x21bb;</button>
+        <span id="tcFuente" style="font-size:10px;color:#aaa;white-space:nowrap"></span>
       </div>
     </div>
     <div class="result-count" id="resultCount">Escribí para buscar entre los 1006 productos</div>
@@ -569,6 +592,31 @@ document.getElementById('modalPrecioPublico').addEventListener('keydown', e => {
 // ─── PRESUPUESTO ──────────────────────────────────────
 let presupItems = [];
 let tipoCambio = 1420;
+
+async function fetchTipoCambio() {
+  const btn = document.getElementById('btnRefreshTC');
+  const fuente = document.getElementById('tcFuente');
+  if (btn) btn.textContent = '...';
+  if (fuente) fuente.textContent = '';
+  try {
+    const res = await fetch('https://mercados.ambito.com/dolar/informal/variacion');
+    const data = await res.json();
+    const venta = parseFloat(data.venta.replace(/\./g, '').replace(',', '.'));
+    if (venta > 0) {
+      tipoCambio = venta;
+      document.getElementById('tipoCambioInput').value = venta;
+      if (fuente) fuente.textContent = 'Blue ' + data.fecha;
+      renderResults();
+      if (window.guardarTipoCambio) window.guardarTipoCambio(venta);
+    }
+  } catch(e) {
+    if (fuente) fuente.textContent = 'sin conexión';
+    console.error('Error fetching tipo de cambio:', e);
+  }
+  if (btn) btn.textContent = '↻';
+}
+
+window.addEventListener('DOMContentLoaded', () => fetchTipoCambio());
 
 function isUSD(p) {
   return p.tipo && p.tipo.toLowerCase().includes('usd');
