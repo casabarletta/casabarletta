@@ -305,6 +305,12 @@ table.pt td.sub { background:#E8F5E9; color:#1B5E20; font-weight:bold; text-alig
         <option value="EXTERIOR">Solo Exterior</option>
         <option value="INTERIOR">Solo Interior</option>
       </select>
+      <div style="display:flex;align-items:center;gap:6px;background:#EBF5FB;border-radius:8px;padding:6px 12px;border:1px solid #d0e8f5">
+        <span style="font-size:11px;color:#555;font-weight:bold;white-space:nowrap">&#x1f4b1; USD 1 =</span>
+        <input type="number" id="tipoCambioInput" value="1420" min="1" step="50"
+          style="width:90px;padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;text-align:right;font-weight:bold"
+          oninput="tipoCambio=parseFloat(this.value)||1;renderResults()">
+      </div>
     </div>
     <div class="result-count" id="resultCount">Escribí para buscar entre los 1006 productos</div>
   </div>
@@ -459,13 +465,17 @@ function renderResults() {
   const rows = shown.map(p => {
     const precioClass = p._modificado ? 'precio-mod' : 'precio-pub';
     const precioTag   = p._modificado ? ' ✏️' : '';
+    const esUSD = isUSD(p);
+    const precioARS = getPrecioARS(p);
+    const listaARS = esUSD ? Math.round((p.lista || 0) * tipoCambio) : p.lista;
+    const usdTag = esUSD ? `<br><span style="font-size:10px;color:#aaa;font-weight:normal">USD ${p.publico}</span>` : '';
     return `<tr>
       <td>${badge(p.fuente)}</td>
       <td>${p.linea || ''}</td>
       <td style="max-width:320px">${p.producto}</td>
       <td style="text-align:center">${p.medida || '—'}</td>
-      <td style="text-align:right">${fmt(p.lista)}</td>
-      <td class="${precioClass}">${fmt(p.publico)}${precioTag}</td>
+      <td style="text-align:right">${esUSD ? '$ ' + listaARS.toLocaleString('es-AR') : fmt(p.lista)}</td>
+      <td class="${precioClass}">${esUSD ? '$ ' + precioARS.toLocaleString('es-AR') : fmt(p.publico)}${usdTag}${precioTag}</td>
       <td style="color:#999;font-size:11px">${p.color || p.tipo || ''}</td>
       <td>
         <button class="btn-add" onclick='addToPresup(${JSON.stringify(p)})'>+ Agregar</button>
@@ -558,6 +568,15 @@ document.getElementById('modalPrecioPublico').addEventListener('keydown', e => {
 
 // ─── PRESUPUESTO ──────────────────────────────────────
 let presupItems = [];
+let tipoCambio = 1420;
+
+function isUSD(p) {
+  return p.tipo && p.tipo.toLowerCase().includes('usd');
+}
+function getPrecioARS(p) {
+  const price = p.publico || 0;
+  return isUSD(p) ? Math.round(price * tipoCambio) : price;
+}
 
 function addToPresup(p) {
   const desc = parseFloat(document.getElementById('descGeneral').value) || 0;
@@ -565,7 +584,7 @@ function addToPresup(p) {
     fuente:   p.fuente  || '',
     producto: p.producto || '',
     medida:   p.medida  || '',
-    precio:   p.publico || 0,
+    precio:   getPrecioARS(p),
     cant:     1,
     desc:     desc,
   });
