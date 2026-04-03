@@ -29,16 +29,22 @@
   window._collection = collection;
   window._getDocs = getDocs;
 
+  // Sanitizar nombre para usarlo como ID de Firestore (sin barras ni caracteres problemáticos)
+  function sanitizeId(nombre) {
+    return nombre.replace(/\//g, '__').replace(/[#\[\]*?]/g, '_').trim();
+  }
+
   // Cargar precios modificados desde Firestore al iniciar
   window.addEventListener('DOMContentLoaded', async () => {
     try {
       const snap = await getDocs(collection(db, 'precios'));
       snap.forEach(d => {
         const data = d.data();
-        // Buscar el producto en la lista y actualizar precio
-        const idx = window.PRODUCTOS.findIndex(p => p.producto === d.id);
+        // Buscar el producto usando el nombre original guardado en el doc, o reconstruyendo desde el id
+        const productoOriginal = data.productoOriginal || d.id.replace(/__/g, '/');
+        const idx = window.PRODUCTOS.findIndex(p => p.producto === productoOriginal);
         if (idx !== -1) {
-          if (data.publico !== undefined) window.PRODUCTOS[idx].publico = data.publico;
+          if (data.publico !== undefined) { window.PRODUCTOS[idx].publico = data.publico; window.PRODUCTOS[idx]._modificado = true; }
           if (data.lista  !== undefined) window.PRODUCTOS[idx].lista   = data.lista;
           if (data.costo  !== undefined) window.PRODUCTOS[idx].costo   = data.costo;
         }
@@ -52,10 +58,11 @@
   // Guardar precio modificado en Firestore
   window.guardarPrecio = async function(productoNombre, campo, valor) {
     try {
-      const ref = doc(db, 'precios', productoNombre);
+      const safeId = sanitizeId(productoNombre);
+      const ref = doc(db, 'precios', safeId);
       const snap = await getDoc(ref);
       const existing = snap.exists() ? snap.data() : {};
-      await setDoc(ref, { ...existing, [campo]: valor, updatedAt: new Date().toISOString() });
+      await setDoc(ref, { ...existing, [campo]: valor, productoOriginal: productoNombre, updatedAt: new Date().toISOString() });
       return true;
     } catch(e) {
       console.error('Error guardando:', e);
